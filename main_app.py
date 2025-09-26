@@ -10,13 +10,13 @@ import math
 import db_manager
 import mapper
 from ui_manager import UIManager
-from recorder import VideoRecorder 
-from music_player import MusicPlayer
+from recorder import VideoRecorder
+# MusicPlayer import removed
 import weather_handler
 
 # --- CONFIGURATION ---
 KEYPAD_DEVICE_PATH = "/dev/input/by-id/usb-SEMICO_USB_Keyboard-event-kbd"
-ITEMS_PER_PAGE = 3 
+ITEMS_PER_PAGE = 3
 AUTO_SCROLL_DELAY = 3.0 # Seconds to wait before starting auto-scroll
 AUTO_SCROLL_INTERVAL = 2.0 # Seconds between each page turn
 
@@ -32,7 +32,7 @@ KEY_MAP = {
 
 def main(disp, gps_queue, gps_data, data_lock):
     """
-    Main application with corrected auto-scrolling menu feature.
+    Main application loop, now without the music player feature.
     """
     # --- Initialization ---
     try:
@@ -46,14 +46,15 @@ def main(disp, gps_queue, gps_data, data_lock):
     recorder_data = {}
     recorder_data_lock = threading.Lock()
     recorder = VideoRecorder(gps_queue, recorder_data, recorder_data_lock)
-    player = MusicPlayer()
+    # player = MusicPlayer() removed
     
     # --- Application State ---
-    main_pages = ['HOME', 'WEATHER', 'STATS', 'MUSIC', 'NAVIGATION', 'DIRECTIONS']
+    # 'MUSIC' page removed from list
+    main_pages = ['HOME', 'WEATHER', 'STATS', 'NAVIGATION', 'DIRECTIONS']
     main_page_index = 0
     
     weather_sub_page_index = 0
-    music_sub_page_index = 0
+    # music_sub_page_index removed
 
     wizard_state = 'IDLE' 
     wizard_choices = {}   
@@ -120,23 +121,18 @@ def main(disp, gps_queue, gps_data, data_lock):
                                 active_route['current_wp_index'] += 1
                             continue
 
-                        if current_page_name == 'MUSIC':
-                            if music_sub_page_index == 0:
-                                if button == '8': player.next_track()
-                                elif button == '2': player.previous_track()
-                                elif button == '5': player.toggle_playback()
-                            if button == '7': music_sub_page_index = 1 - music_sub_page_index
+                        # Entire 'if current_page_name == 'MUSIC':' block removed
                         
-                        elif current_page_name == 'WEATHER':
+                        if current_page_name == 'WEATHER':
                             if button == '8' or button == '2': weather_sub_page_index = 1 - weather_sub_page_index
 
                         if wizard_state == 'IDLE' and not active_route:
                             if button == '4': 
                                 main_page_index = (main_page_index - 1 + len(main_pages)) % len(main_pages)
-                                weather_sub_page_index, music_sub_page_index = 0, 0
+                                weather_sub_page_index = 0
                             elif button == '6':
                                 main_page_index = (main_page_index + 1) % len(main_pages)
-                                weather_sub_page_index, music_sub_page_index = 0, 0
+                                weather_sub_page_index = 0
                             elif button == 'RECORD_TOGGLE':
                                 if recorder.is_recording(): recorder.stop()
                                 else: recorder.start()
@@ -147,7 +143,8 @@ def main(disp, gps_queue, gps_data, data_lock):
                                     ui.display_message("Waypoint Saved!", 1500)
                                 else: ui.display_message("No GPS Fix!", 1500)
                             elif button == 'BACK' and main_page_index != 0: 
-                                main_page_index, weather_sub_page_index, music_sub_page_index = 0, 0, 0
+                                main_page_index = 0
+                                weather_sub_page_index = 0
                             elif current_page_name == 'DIRECTIONS' and button == '5':
                                  wizard_state = 'SELECT_TYPE'
                             continue
@@ -269,7 +266,7 @@ def main(disp, gps_queue, gps_data, data_lock):
                 current_page_name = main_pages[main_page_index]
                 if active_route:
                     next_waypoint_info = mapper.update_position(active_route, current_location)
-                    ui.display_navigation_screen(next_waypoint_info, is_main_page=False, active_route=active_route, gps_fix=gps_fix)
+                    ui.display_navigation_screen(next_waypoint_info, is_main_page=False, active_route=active_.pyroute, gps_fix=gps_fix)
                     if next_waypoint_info is None:
                         ui.display_message("Route Finished!", 2000); active_route = None
                 
@@ -302,11 +299,7 @@ def main(disp, gps_queue, gps_data, data_lock):
                     else: ui.display_snow_report_screen(latest_weather)
                 elif current_page_name == 'STATS':
                     ui.display_summary_screen(db_manager.get_trip_summary())
-                elif current_page_name == 'MUSIC':
-                    if music_sub_page_index == 0:
-                        track_info = player.get_current_track_info(); ui.display_now_playing_screen(track_info, player.is_playing)
-                    else:
-                        ui.display_playlist_screen(list(player.playlists.keys()), player.current_playlist_name)
+                # 'elif current_page_name == 'MUSIC':' block removed
                 elif current_page_name == 'NAVIGATION':
                     ui.display_navigation_screen(None, is_main_page=True, gps_fix=gps_fix)
                 elif current_page_name == 'DIRECTIONS':

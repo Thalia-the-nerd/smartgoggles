@@ -86,35 +86,7 @@ class UIManager:
         self._draw_page_indicator(draw, "WEATHER", sub_page_info="2/2")
         self._display_image(image)
 
-    def display_now_playing_screen(self, track_name, is_playing):
-        # ... (function content is unchanged) ...
-        image = self._create_base_image()
-        draw = ImageDraw.Draw(image)
-        draw.text((2, 2), "NOW PLAYING", font=self.font_small, fill=0)
-        draw.line([(0, 15), (self.width, 15)], fill=0)
-        if len(track_name) > 20: track_name = track_name[:18] + "..."
-        draw.text((5, 20), track_name, font=self.font_small, fill=0)
-        status_text = "Status: Playing" if is_playing else "Status: Paused"
-        draw.text((5, 35), status_text, font=self.font_small, fill=0)
-        controls_text = "8:Next 2:Prev 5:Play/Pause"
-        draw.text((5, 50), controls_text, font=self.font_small, fill=0)
-        self._draw_page_indicator(draw, "MUSIC", sub_page_info="1/2")
-        self._display_image(image)
-        
-    def display_playlist_screen(self, playlists, current_playlist):
-        # ... (function content is unchanged) ...
-        image = self._create_base_image()
-        draw = ImageDraw.Draw(image)
-        draw.text((2, 2), "SELECT PLAYLIST", font=self.font_small, fill=0)
-        draw.line([(0, 15), (self.width, 15)], fill=0)
-        y_pos = 20
-        for name in playlists:
-            prefix = "> " if name == current_playlist else "  "
-            draw.text((5, y_pos), prefix + name, font=self.font_small, fill=0)
-            y_pos += 15
-            if y_pos > self.height - 20: break
-        self._draw_page_indicator(draw, "MUSIC", sub_page_info="2/2")
-        self._display_image(image)
+    # display_now_playing_screen and display_playlist_screen removed
 
     def display_navigation_screen(self, next_waypoint_info, is_main_page=True, active_route=None, gps_fix=False):
         """
