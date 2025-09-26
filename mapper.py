@@ -3,7 +3,7 @@ from math import radians, sin, cos, sqrt, atan2
 import heapq 
 import time
 import audio_handler
-import random # Import the random module
+import random
 
 # --- Configuration ---
 PROXIMITY_RADIUS_METERS = 10
@@ -50,7 +50,6 @@ def a_star_search(nodes, graph, start_node_id, end_node_id):
 
 # --- Main Mapper Functions ---
 def build_resort_graph(difficulty_filter):
-    # ... (function content is unchanged) ...
     all_waypoints = db_manager.get_all_waypoints()
     all_runs = db_manager.get_all_runs_structured() 
     nodes = {wp['id']: wp for wp in all_waypoints}
@@ -70,192 +69,168 @@ def build_resort_graph(difficulty_filter):
     return nodes, graph
 
 def check_path_existence(start_wp_id, dest_wp_id, difficulty):
-    # ... (function content is unchanged) ...
     nodes, graph = build_resort_graph(difficulty)
     if start_wp_id not in nodes or dest_wp_id not in nodes: return False
     return a_star_search(nodes, graph, start_wp_id, dest_wp_id) is not None
 
 def find_n_closest_waypoints(current_location, n=5):
-    # ... (function content is unchanged) ...
     all_waypoints = db_manager.get_all_waypoints()
     if not all_waypoints or not has_gps_data(current_location): return []
     for wp in all_waypoints: wp['distance'] = haversine_distance(current_location, wp)
     return sorted(all_waypoints, key=lambda x: x['distance'])[:n]
 
 def find_closest_poi(current_location, poi_type):
-    """Finds the closest POI of a given type to the current location."""
-    pois = db_manager.get_waypoints_by_type(poi_type)
-    if not pois or not has_gps_data(current_location):
-        return None
+    all_waypoints = db_manager.get_all_waypoints()
+    if not all_waypoints or not has_gps_data(current_location): return None
     
-    closest_poi = min(pois, key=lambda poi: haversine_distance(current_location, poi))
-    closest_poi['distance_m'] = haversine_distance(current_location, closest_poi)
-    return closest_poi
+    poi_waypoints = [wp for wp in all_waypoints if wp.get('type') == poi_type]
+    if not poi_waypoints: return None
+
+    for wp in poi_waypoints: wp['distance_m'] = haversine_distance(current_location, wp)
+    return min(poi_waypoints, key=lambda x: x['distance_m'])
 
 def find_smart_route_to_waypoint(start_waypoint_id, dest_wp_id, difficulty):
-    """
-    Finds up to 5 distinct routes based on the first step and randomly returns one.
-    """
     print(f"MAPPER: Finding multiple routes from WP ID {start_waypoint_id} to WP ID {dest_wp_id} with difficulty {difficulty}")
     nodes, graph = build_resort_graph(difficulty)
-
-    if not nodes or start_waypoint_id not in nodes:
-        return None
-
-    # 1. Find all valid first steps (runs/lifts) from the start waypoint
+    if not nodes or start_waypoint_id not in nodes: return None
     all_runs = db_manager.get_all_runs_structured()
     difficulty_map = {'Green': 1, 'Blue': 2, 'Black': 3, 'Lift': 0}
     max_difficulty_val = difficulty_map.get(difficulty, 1)
-    
     potential_first_steps = []
     for run in all_runs:
         if run['waypoints_list'][0] == start_waypoint_id:
             run_difficulty_val = difficulty_map.get(run['difficulty'], 4)
             if run_difficulty_val <= max_difficulty_val or run['type'] == 'Lift':
                 potential_first_steps.append(run)
-
-    if not potential_first_steps:
-        print("MAPPER: No valid starting runs found.")
-        return None
-
-    # 2. For each potential first step, find the optimal path from its end
+    if not potential_first_steps: print("MAPPER: No valid starting runs found."); return None
     all_possible_routes = []
     for first_step_run in potential_first_steps:
         intermediate_start_wp_id = first_step_run['waypoints_list'][-1]
-        
         if intermediate_start_wp_id == dest_wp_id:
             path_waypoints = [nodes[wp_id] for wp_id in first_step_run['waypoints_list']]
             all_possible_routes.append({'waypoints': path_waypoints, 'current_wp_index': 0})
             continue
-
         remaining_path = a_star_search(nodes, graph, intermediate_start_wp_id, dest_wp_id)
-        
         if remaining_path:
             first_step_waypoints = [nodes[wp_id] for wp_id in first_step_run['waypoints_list']]
-            full_path = first_step_waypoints + remaining_path[1:] # Avoid duplicating junction
+            full_path = first_step_waypoints + remaining_path[1:]
             all_possible_routes.append({'waypoints': full_path, 'current_wp_index': 0})
-
-    if not all_possible_routes:
-        print("MAPPER: No complete paths found.")
-        return None
-
-    # 3. Limit to the top 5 (or fewer) distinct routes and randomly select one
-    # To get more variety, we'll shuffle and pick from the first 5
+    if not all_possible_routes: print("MAPPER: No complete paths found."); return None
     random.shuffle(all_possible_routes)
     top_routes = all_possible_routes[:5]
-    print(f"MAPPER: Found {len(top_routes)} distinct route options. Randomly selecting one.")
-    
     selected_route = random.choice(top_routes)
-    selected_route['is_smart_route'] = True # Flag for other parts of the app
-    
-    print(f"MAPPER: Selected a route with {len(selected_route['waypoints'])} waypoints.")
+    selected_route['is_smart_route'] = True
     return selected_route
 
-def start_route(route_id):
-    # ... (function content is unchanged) ...
+def start_route(route_id, all_runs_by_id):
     route_details = db_manager.get_route_by_id(route_id)
-    waypoints = db_manager.get_waypoints_for_route(route_id)
-    if not waypoints or not route_details or not route_details.get('runs_list'): return None
+    if not route_details or not route_details.get('runs_list'): return None
     
-    active_route = {
-        'waypoints': waypoints, 'current_wp_index': 0,
-        'runs_in_route': route_details['runs_list'],
-        'current_run_index': 0, 
-        'run_start_times': {}, # Use a dict to store start times per run_id
-        'run_start_alt': {},   # Store starting altitude for analytics
-        'run_log_data': {}     # Store trip log points per run_id
-    }
+    initial_waypoints = db_manager.get_waypoints_for_route(route_id)
+    if not initial_waypoints: return None
     
-    # Set the start time and altitude for the very first run
-    first_run_id = route_details['runs_list'][0]
-    active_route['run_start_times'][first_run_id] = time.time()
-    # We'll get the starting altitude when the first GPS point comes in
-    
-    return active_route
+    run_log_data = []
+    for run_id in route_details.get('runs_list', []):
+        run_info = all_runs_by_id.get(run_id)
+        if run_info:
+            run_log_data.append({
+                'run_id': run_id,
+                'run_name': run_info['name'],
+                'start_time': None, 'end_time': None,
+                'start_alt': None, 'end_alt': None,
+                'points': []
+            })
 
+    return {
+        'waypoints': initial_waypoints, 'current_wp_index': 0,
+        'runs_in_route': route_details['runs_list'],
+        'run_log_data': run_log_data,
+        'current_run_log_index': 0
+    }
 
 def update_position(active_route, current_location):
     if not active_route or not has_gps_data(current_location):
-        return get_current_waypoint_info(active_route)
+        return {'waypoint_info': get_current_waypoint_info(active_route)}
+
     if active_route['current_wp_index'] >= len(active_route['waypoints']):
-        return None
+        return None 
+    
+    current_run_log = None
+    if 'run_log_data' in active_route and active_route['current_run_log_index'] < len(active_route['run_log_data']):
+        current_run_log = active_route['run_log_data'][active_route['current_run_log_index']]
+        if current_run_log['start_time'] is None:
+            current_run_log['start_time'] = time.time()
+            current_run_log['start_alt'] = current_location.get('alt_m')
+        current_run_log['points'].append(current_location)
 
-    # --- Analytics: Log current point to the active run ---
-    if 'runs_in_route' in active_route:
-        current_run_index = active_route.get('current_run_index', 0)
-        if current_run_index < len(active_route['runs_in_route']):
-            current_run_id = active_route['runs_in_route'][current_run_index]
-            
-            # Initialize log list for this run if it doesn't exist
-            if current_run_id not in active_route['run_log_data']:
-                active_route['run_log_data'][current_run_id] = []
-            
-            # Store starting altitude on the first data point for this run
-            if current_run_id not in active_route['run_start_alt']:
-                active_route['run_start_alt'][current_run_id] = current_location.get('alt_m')
-
-            # Append current location data for analytics
-            active_route['run_log_data'][current_run_id].append(current_location)
-
-    # --- Waypoint Proximity Check ---
     next_wp = active_route['waypoints'][active_route['current_wp_index']]
     distance_to_wp = haversine_distance(current_location, next_wp)
+    return_data = {}
 
     if distance_to_wp < PROXIMITY_RADIUS_METERS:
-        # --- Handle Run Completion and Analytics ---
-        if 'runs_in_route' in active_route:
-            # Check if the waypoint we just reached is the end of a run
-            all_runs = db_manager.get_all_runs_structured()
-            for run in all_runs:
-                if next_wp['id'] == run['waypoints_list'][-1] and run['id'] == active_route['runs_in_route'][active_route['current_run_index']]:
-                    
-                    # --- Calculate Analytics for the completed run ---
-                    run_id = run['id']
-                    start_time = active_route['run_start_times'].get(run_id)
-                    
-                    if start_time and run_id in active_route['run_log_data']:
-                        duration = time.time() - start_time
-                        
-                        # Get analytics from the logged points for this run
-                        logged_points = active_route['run_log_data'][run_id]
-                        start_alt = active_route['run_start_alt'].get(run_id, 0)
-                        end_alt = logged_points[-1].get('alt_m', start_alt)
-                        vertical_m = start_alt - end_alt
-                        top_speed_kph = max(p.get('speed_kph', 0) for p in logged_points) if logged_points else 0
-
-                        # Add to logbook
-                        db_manager.add_run_to_log(run_id, run['name'], duration, vertical_m, top_speed_kph)
-                        print(f"ANALYTICS: Logged '{run['name']}'. Time: {duration:.1f}s, Vert: {vertical_m:.0f}m")
-
-                        # Handle Ghost Race best time update
-                        # (This logic can be expanded)
-
-                    # --- Advance to the next run in the route ---
-                    active_route['current_run_index'] += 1
-                    if active_route['current_run_index'] < len(active_route['runs_in_route']):
-                        next_run_id = active_route['runs_in_route'][active_route['current_run_index']]
-                        active_route['run_start_times'][next_run_id] = time.time()
-
-                    break # Exit the run check loop
-
-        # --- Advance to the next waypoint ---
         active_route['current_wp_index'] += 1
+        
+        # Check if the just-completed waypoint was the end of a run
+        if current_run_log:
+            run_info = db_manager.get_all_runs_structured() # Inefficient, better to pass this in
+            run_info_map = {r['id']: r for r in run_info}
+            current_run_definition = run_info_map.get(current_run_log['run_id'])
+            
+            if current_run_definition and next_wp['id'] == current_run_definition['waypoints_list'][-1]:
+                current_run_log['end_time'] = time.time()
+                current_run_log['end_alt'] = current_location.get('alt_m')
+                
+                # --- Calculate Analytics ---
+                analytics = {
+                    'run_name': current_run_log['run_name'],
+                    'duration_seconds': current_run_log['end_time'] - current_run_log['start_time'],
+                    'vertical_m': (current_run_log['start_alt'] - current_run_log['end_alt']) if current_run_log['start_alt'] and current_run_log['end_alt'] else 0,
+                    'top_speed_kph': max(p.get('speed_kph', 0) for p in current_run_log['points']) if current_run_log['points'] else 0
+                }
+                return_data['analytics'] = analytics
+                db_manager.log_completed_run(analytics) # Log to daily DB
+                
+                active_route['current_run_log_index'] += 1
+
         if active_route['current_wp_index'] >= len(active_route['waypoints']):
             audio_handler.speak("Route finished.")
-            # Optionally, trigger a final summary screen here
             return None 
-            
+
         new_next_wp = active_route['waypoints'][active_route['current_wp_index']]
         audio_handler.speak(f"Next, {new_next_wp['name']}")
         distance_to_wp = haversine_distance(current_location, new_next_wp)
         next_wp = new_next_wp
 
-    return {'name': next_wp['name'], 'distance_m': distance_to_wp}
-
+    return_data['waypoint_info'] = {'name': next_wp['name'], 'distance_m': distance_to_wp}
+    return return_data
 
 def get_current_waypoint_info(active_route):
     if not active_route or active_route['current_wp_index'] >= len(active_route['waypoints']):
         return None
     next_wp = active_route['waypoints'][active_route['current_wp_index']]
     return {'name': next_wp['name']}
+
+def reverse_route(active_route):
+    """
+    Takes an active route object and returns a new route object with the
+    waypoint list reversed.
+    """
+    if not active_route or 'waypoints' not in active_route or not active_route['waypoints']:
+        print("MAPPER: Cannot reverse an empty or invalid route.")
+        return None
+
+    print("MAPPER: Reversing the current route.")
+    
+    reversed_waypoints = active_route['waypoints'][::-1]
+    
+    reversed_route_obj = {
+        'waypoints': reversed_waypoints,
+        'current_wp_index': 0,
+        'is_smart_route': True,
+        'is_ghost_race': False,
+    }
+    
+    print(f"MAPPER: New route created from '{reversed_waypoints[0]['name']}' to '{reversed_waypoints[-1]['name']}'.")
+    return reversed_route_obj
+
 

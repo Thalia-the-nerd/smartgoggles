@@ -13,7 +13,8 @@ import db_manager
 import gps_handler
 import trip_logger
 import main_app
-import weather_handler # Import the new weather handler module
+import weather_handler
+from ui_manager import UIManager # Import UIManager to use the splash screen
 
 # --- Shared Data, Lock, and Queue ---
 gps_queue = queue.Queue()
@@ -32,6 +33,10 @@ if __name__ == '__main__':
         disp.Init()
         disp.clear()
         print("BOOT: Display initialized successfully.")
+
+        # --- NEW: Show Splash Screen ---
+        ui = UIManager(disp)
+        ui.display_splash_screen()
 
         # --- Database Initialization ---
         print("BOOT: Checking for database...")
@@ -53,7 +58,7 @@ if __name__ == '__main__':
         logger_thread = threading.Thread(target=trip_logger.trip_logger_thread, args=(gps_data, data_lock, trip_logger_stop_event), daemon=True)
         logger_thread.start()
         
-        # NEW: Weather Handler Thread
+        # Weather Handler Thread
         weather_thread, weather_stop_event = weather_handler.start_weather_thread()
         stop_events.append(weather_stop_event)
         
@@ -61,8 +66,8 @@ if __name__ == '__main__':
 
         # --- Hand off to Main Application ---
         print("BOOT: Starting main application...")
-        # Main app gets the queue and also the shared data/lock for the logger
-        main_app.main(disp, gps_queue, gps_data, data_lock)
+        # Pass the already-initialized UI manager to the main app
+        main_app.main(disp, gps_queue, gps_data, data_lock, ui)
 
     except IOError as e:
         print(f"FATAL: Could not initialize display. Check wiring. Error: {e}")
