@@ -42,7 +42,7 @@ class VideoRecorder:
 
     def _record_loop(self):
         """The main recording loop that runs in its own thread."""
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1)
         if not cap.isOpened():
             print("RECORDER ERROR: Cannot open webcam.")
             return

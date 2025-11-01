@@ -9,6 +9,8 @@ LOG_DIRECTORY = 'daily_logs'
 # --- Helper Functions ---
 def execute_query(db_path, query, params=(), fetchone=False, fetchall=False, commit=False):
     """A centralized function to execute database queries against a specific DB file."""
+    if 'daily_logs' in db_path and not os.path.exists(os.path.dirname(db_path)):
+        os.makedirs(os.path.dirname(db_path))
     conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -25,7 +27,7 @@ def execute_query(db_path, query, params=(), fetchone=False, fetchall=False, com
 # --- Main DB (skidata.db) Functions ---
 def setup_database():
     """Sets up the initial database schema for the main, persistent resort data."""
-    # trip_log table creation is removed from this central database.
+    # (Setup queries remain the same)
     execute_query(DB_FILE, '''
     CREATE TABLE IF NOT EXISTS waypoints (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
@@ -48,9 +50,9 @@ def setup_database():
     )''')
     print("DB_MANAGER: Main database setup/verification complete.")
 
-def add_waypoint(name, lat, lon, alt):
-    execute_query(DB_FILE, "INSERT INTO waypoints (name, lat, lon, alt) VALUES (?, ?, ?, ?)", (name, lat, lon, alt), commit=True)
-# ... (All other functions that modify skidata.db remain the same, but now pass DB_FILE)
+# (Functions like add_waypoint, add_run_lift etc. remain unchanged)
+def add_waypoint(name, lat, lon, alt, waypoint_type='junction'):
+    execute_query(DB_FILE, "INSERT INTO waypoints (name, lat, lon, alt, type) VALUES (?, ?, ?, ?, ?)", (name, lat, lon, alt, waypoint_type), commit=True)
 def add_run_lift(name, waypoint_ids, run_type, difficulty):
     waypoints_str = ','.join(map(str, waypoint_ids))
     execute_query(DB_FILE, "INSERT INTO run_lift (name, waypoints, type, difficulty) VALUES (?, ?, ?, ?)", (name, waypoints_str, run_type, difficulty), commit=True)
@@ -61,32 +63,71 @@ def delete_waypoint(wp_id):
     execute_query(DB_FILE, "DELETE FROM waypoints WHERE id = ?", (wp_id,), commit=True)
 def delete_run_lift(run_id):
     execute_query(DB_FILE, "DELETE FROM run_lift WHERE id = ?", (run_id,), commit=True)
-    execute_query(DB_FILE, "DELETE FROM personal_bests WHERE run_id = ?", (run_id,), commit=True)
 def delete_route(route_id):
     execute_query(DB_FILE, "DELETE FROM routes WHERE id = ?", (route_id,), commit=True)
 def update_waypoint(wp_id, name, lat, lon, alt):
     execute_query(DB_FILE, "UPDATE waypoints SET name=?, lat=?, lon=?, alt=? WHERE id=?", (name, lat, lon, alt, wp_id), commit=True)
-def get_personal_best(run_id):
-    result = execute_query(DB_FILE, "SELECT best_time_seconds FROM personal_bests WHERE run_id = ?", (run_id,), fetchone=True)
-    return result['best_time_seconds'] if result else None
-def update_personal_best(run_id, new_time):
-    execute_query(DB_FILE, "INSERT OR REPLACE INTO personal_bests (run_id, best_time_seconds) VALUES (?, ?)", (run_id, new_time), commit=True)
+
+# --- Data Retrieval for Navigation ---
 def get_all_waypoints():
     rows = execute_query(DB_FILE, "SELECT * FROM waypoints ORDER BY name", fetchall=True)
     return [dict(row) for row in rows]
+
+def get_waypoint_by_id(wp_id):
+    """Retrieves a single waypoint by its primary key ID."""
+    row = execute_query(DB_FILE, "SELECT * FROM waypoints WHERE id = ?", (wp_id,), fetchone=True)
+    return dict(row) if row else None
+
 def get_all_runs_structured():
     rows = execute_query(DB_FILE, "SELECT * FROM run_lift ORDER BY name", fetchall=True)
-    runs = [dict(row) for row in rows]
-    for run in runs: run['waypoints_list'] = [int(wp_id) for wp_id in run['waypoints'].split(',') if wp_id]
+    runs = []
+    for row in rows:
+        run_dict = dict(row)
+        run_dict['waypoints_list'] = [int(wp_id) for wp_id in run_dict['waypoints'].split(',') if wp_id]
+        runs.append(run_dict)
     return runs
+
 def get_all_routes_structured():
+    """Retrieves all routes and parses their run lists."""
     rows = execute_query(DB_FILE, "SELECT * FROM routes ORDER BY name", fetchall=True)
-    routes = [dict(row) for row in rows]
-    for route in routes: route['runs_list'] = [int(r_id) for r_id in route['runs'].split(',') if r_id]
+    routes = []
+    for row in rows:
+        route_dict = dict(row)
+        route_dict['runs_list'] = [int(run_id) for run_id in route_dict['runs'].split(',') if run_id]
+        routes.append(route_dict)
     return routes
+
+def get_routes_starting_at(start_wp_id):
+    """
+    Finds all predefined routes that start at a given waypoint ID.
+    This is complex because it has to trace the first run of each route.
+    """
+    all_routes = get_all_routes_structured()
+    all_runs = get_all_runs_structured()
+    runs_by_id = {run['id']: run for run in all_runs}
+    
+    starting_routes = []
+    for route in all_routes:
+        if not route.get('runs_list'):
+            continue
+        
+        first_run_id = route['runs_list'][0]
+        first_run = runs_by_id.get(first_run_id)
+        
+        if not first_run or not first_run.get('waypoints_list'):
+            continue
+            
+        first_waypoint_id = first_run['waypoints_list'][0]
+        
+        if first_waypoint_id == start_wp_id:
+            starting_routes.append(route)
+            
+    return starting_routes
+
 def get_route_by_id(route_id):
     row = execute_query(DB_FILE, "SELECT * FROM routes WHERE id = ?", (route_id,), fetchone=True)
     return dict(row) if row else None
+
 def get_waypoints_for_route(route_id):
     route_row = execute_query(DB_FILE, "SELECT runs FROM routes WHERE id = ?", (route_id,), fetchone=True)
     if not route_row: return []
@@ -103,46 +144,46 @@ def get_waypoints_for_route(route_id):
                 if wp_row: final_waypoints.append(dict(wp_row)); processed_wp_ids.add(wp_id)
     return final_waypoints
 
-
-# --- Daily Log DB Functions ---
+# (Personal best and daily log functions remain unchanged)
+def get_personal_best(run_id):
+    result = execute_query(DB_FILE, "SELECT best_time_seconds FROM personal_bests WHERE run_id = ?", (run_id,), fetchone=True)
+    return result['best_time_seconds'] if result else None
+def update_personal_best(run_id, new_time):
+    execute_query(DB_FILE, "INSERT OR REPLACE INTO personal_bests (run_id, best_time_seconds) VALUES (?, ?)", (run_id, new_time), commit=True)
 def get_daily_db_path():
-    """Returns the path for today's database file."""
     today_str = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOG_DIRECTORY, f"{today_str}.db")
-
+def log_completed_run(analytics_data):
+    db_path = get_daily_db_path()
+    execute_query(db_path, '''CREATE TABLE IF NOT EXISTS run_log (id INTEGER PRIMARY KEY, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, run_name TEXT, duration_seconds REAL, vertical_m REAL, top_speed_kph REAL)''')
+    query = "INSERT INTO run_log (run_name, duration_seconds, vertical_m, top_speed_kph) VALUES (?, ?, ?, ?)"
+    params = (analytics_data['run_name'], analytics_data['duration_seconds'], analytics_data['vertical_m'], analytics_data['top_speed_kph'])
+    execute_query(db_path, query, params, commit=True)
+def get_days_bests():
+    db_path = get_daily_db_path()
+    if not os.path.exists(db_path): return {'longest_run': None, 'biggest_drop': None, 'fastest_run': None}
+    execute_query(db_path, '''CREATE TABLE IF NOT EXISTS run_log (id INTEGER, timestamp DATETIME, run_name TEXT, duration_seconds REAL, vertical_m REAL, top_speed_kph REAL)''')
+    longest_run = execute_query(db_path, "SELECT * FROM run_log ORDER BY duration_seconds DESC LIMIT 1", fetchone=True)
+    biggest_drop = execute_query(db_path, "SELECT * FROM run_log WHERE vertical_m > 0 ORDER BY vertical_m DESC LIMIT 1", fetchone=True)
+    fastest_run = execute_query(db_path, "SELECT * FROM run_log ORDER BY top_speed_kph DESC LIMIT 1", fetchone=True)
+    return {'longest_run': dict(longest_run) if longest_run else None, 'biggest_drop': dict(biggest_drop) if biggest_drop else None, 'fastest_run': dict(fastest_run) if fastest_run else None}
+def get_run_log_entries():
+    db_path = get_daily_db_path()
+    if not os.path.exists(db_path): return []
+    execute_query(db_path, '''CREATE TABLE IF NOT EXISTS run_log (id INTEGER, timestamp DATETIME, run_name TEXT, duration_seconds REAL, vertical_m REAL, top_speed_kph REAL)''')
+    rows = execute_query(db_path, "SELECT * FROM run_log ORDER BY timestamp DESC", fetchall=True)
+    return [dict(row) for row in rows]
 def get_performance_profile_from_log():
-    """Calculates the time spent in different speed zones from today's log."""
     db_path = get_daily_db_path()
     if not os.path.exists(db_path): return {}
-    
-    # Speed is in m/s in the log. 15kph ~= 4.2m/s, 40kph ~= 11.1m/s
-    query = """
-    SELECT
-        SUM(CASE WHEN speed < 4.2 THEN 5 ELSE 0 END) AS relaxed_time,
-        SUM(CASE WHEN speed >= 4.2 AND speed < 11.1 THEN 5 ELSE 0 END) AS cruising_time,
-        SUM(CASE WHEN speed >= 11.1 THEN 5 ELSE 0 END) AS aggressive_time
-    FROM trip_log
-    """
+    execute_query(db_path, '''CREATE TABLE IF NOT EXISTS trip_log (id INTEGER, lat REAL, lon REAL, alt REAL, speed REAL)''')
+    query = "SELECT SUM(CASE WHEN speed < 4.2 THEN 5 ELSE 0 END) AS relaxed_time, SUM(CASE WHEN speed >= 4.2 AND speed < 11.1 THEN 5 ELSE 0 END) AS cruising_time, SUM(CASE WHEN speed >= 11.1 THEN 5 ELSE 0 END) AS aggressive_time FROM trip_log"
     profile = execute_query(db_path, query, fetchone=True)
-    return dict(profile) if profile else {}
-
-def get_bests_from_daily_log():
-    """Finds the day's best stats from the 'run_log' table in the daily DB."""
-    # This requires that run analytics are also logged to the daily DB.
-    # We will need to add a run_log table to the daily DB schema.
-    # For now, this is a placeholder. A more complete implementation is needed
-    # in mapper.py and trip_logger.py to log completed runs.
-    return {
-        'longest_run': {'run_name': 'Placeholder', 'duration_seconds': 185},
-        'biggest_drop': {'run_name': 'Placeholder', 'vertical_m': 250},
-        'fastest_run': {'run_name': 'Placeholder', 'top_speed_kph': 65.2},
-    }
-
+    return dict(profile) if profile and profile['relaxed_time'] is not None else {}
 def get_todays_stats_from_daily_log():
-    """Calculates summary stats from today's trip_log."""
     db_path = get_daily_db_path()
     if not os.path.exists(db_path): return {'total_vertical_m': 0, 'top_speed_kph': 0}
-    
+    execute_query(db_path, '''CREATE TABLE IF NOT EXISTS trip_log (id INTEGER, lat REAL, lon REAL, alt REAL, speed REAL)''')
     min_alt, max_alt = execute_query(db_path, "SELECT MIN(alt), MAX(alt) FROM trip_log", fetchone=True) or (0,0)
     total_vertical_m = (max_alt - min_alt) if max_alt is not None and min_alt is not None else 0
     top_speed_mps = (execute_query(db_path, "SELECT MAX(speed) FROM trip_log", fetchone=True) or [0])[0] or 0
