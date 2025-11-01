@@ -1,19 +1,16 @@
+from PIL import Image, ImageDraw, ImageFont
 import os
 import time
-from PIL import Image, ImageDraw, ImageFont
+import math
 
 # --- UI Configuration ---
 FONT_PATH = os.path.join(os.path.dirname(__file__), 'VCR_OSD_MONO.ttf')
 
-# --- Weather Icon Mapping ---
-WEATHER_ICONS = {
-    "Clear": "O", "Cloudy": "C", "Fog": "F", "Rain": "R",
-    "Snow": "*", "T-Storm": "T", "Mixed": "?", "Loading...": "...",
-    "Unknown": "?", "Network Error": "X"
-}
-
 class UIManager:
-    """Manages all drawing operations for the Smart Goggles UI."""
+    """
+    Manages all drawing operations for the Smart Goggles UI.
+    Includes a persistent header, splash screen, and enhanced data displays.
+    """
     def __init__(self, disp):
         self.disp = disp
         self.width = disp.width
@@ -22,252 +19,310 @@ class UIManager:
         try:
             self.font_small = ImageFont.truetype(FONT_PATH, 12)
             self.font_large = ImageFont.truetype(FONT_PATH, 16)
-            self.font_xl = ImageFont.truetype(FONT_PATH, 24)
+            self.font_xlarge = ImageFont.truetype(FONT_PATH, 24)
         except IOError:
             print(f"ERROR: Font file not found at {FONT_PATH}. Using default font.")
             self.font_small = ImageFont.load_default()
             self.font_large = ImageFont.load_default()
-            self.font_xl = ImageFont.load_default()
+            self.font_xlarge = ImageFont.load_default()
 
-    def _create_base_image_and_draw(self):
-        """Creates a blank image and a draw object."""
-        image = Image.new('1', (self.width, self.height), "WHITE")
-        return image, ImageDraw.Draw(image)
+    def _create_base_image(self):
+        """Creates a blank, black-and-white image buffer."""
+        return Image.new('1', (self.width, self.height), "WHITE")
 
     def _display_image(self, image):
-        """Rotates the final image 180 degrees and displays it."""
-        self.disp.ShowImage(self.disp.getbuffer(image.rotate(180)))
+        """Rotates and displays the image buffer on the physical screen."""
+        self.disp.ShowImage(self.disp.getbuffer(image.rotate(0)))
 
-    def _draw_header(self, draw, header_data):
-        """Draws the persistent top status bar."""
-        gps_fix = header_data.get('gps_fix', False)
-        time_str = header_data.get('time_str', '--:--:--')
-        is_recording = header_data.get('is_recording', False)
-
-        gps_status_text = "GPS" if gps_fix else "NO GPS"
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def _draw_persistent_header(self, draw, gps_fix, time_str):
+        """Draws the top status bar, now used on all screens."""
+        gps_status_text = "GPS: OK" if gps_fix else "GPS: NO FIX"
         draw.text((2, 2), gps_status_text, font=self.font_small, fill=0)
+        draw.text((self.width - 45, 2), time_str, font=self.font_small, fill=0)
         
-        time_bbox = draw.textbbox((0, 0), time_str, font=self.font_small)
-        time_width = time_bbox[2] - time_bbox[0]
-        draw.text(((self.width - time_width) / 2, 2), time_str, font=self.font_small, fill=0)
+        # --- MODIFICATION: Recording icon logic removed ---
+        # if is_recording:
+        #     draw.ellipse((self.width - 80, 2, self.width - 70, 12), fill=0)
+        #     draw.text((self.width - 110, 2), "REC", font=self.font_small, fill=0)
+        # --- END MODIFICATION ---
 
-        if is_recording:
-            rec_text = "REC"
-            rec_bbox = draw.textbbox((0, 0), rec_text, font=self.font_small)
-            rec_width = rec_bbox[2] - rec_bbox[0]
-            draw.ellipse((self.width - rec_width - 10, 4, self.width - rec_width, 14), fill=0)
-            draw.text((self.width - rec_width - 2, 2), rec_text, font=self.font_small, fill=0)
-            
-        draw.line([(0, 18), (self.width, 18)], fill=0, width=2)
+        draw.line([(0, 15), (self.width, 15)], fill=0)
+
+    def _draw_page_indicator(self, draw, page_name, sub_page_info=None):
+        """Draws the '< PAGE >' indicator at the bottom of the screen."""
+        
+        # --- MODIFICATION: Page indicator logic removed ---
+        # indicator_text = f"< {page_name.upper()} >"
+        # if sub_page_info:
+        #     indicator_text = f"< {page_name.upper()} ({sub_page_info}) >"
+        
+        # text_bbox = draw.textbbox((0, 0), indicator_text, font=self.font_small)
+        # text_width = text_bbox[2] - text_bbox[0]
+        # x = (self.width - text_width) / 2
+        # y = self.height - 14
+        # draw.text((x, y), indicator_text, font=self.font_small, fill=0)
+        pass # Do nothing
+        # --- END MODIFICATION ---
 
     def display_splash_screen(self):
-        image, draw = self._create_base_image_and_draw()
-        title_text = "SMART GOGGLES"
-        version_text = "v1.1"
+        """Displays a startup splash screen."""
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
         
-        title_bbox = draw.textbbox((0,0), title_text, font=self.font_large)
-        draw.text(((self.width - title_bbox[2])/2, 20), title_text, font=self.font_large, fill=0)
-        
-        ver_bbox = draw.textbbox((0,0), version_text, font=self.font_small)
-        draw.text(((self.width - ver_bbox[2])/2, 45), version_text, font=self.font_small, fill=0)
+        logo_text = "Smart Goggles"
+        text_bbox = draw.textbbox((0, 0), logo_text, font=self.font_large)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        x = (self.width - text_width) / 2
+        y = (self.height - text_height) / 2
+        draw.text((x, y), logo_text, font=self.font_large, fill=0)
         
         self._display_image(image)
         time.sleep(2.5)
 
-    def display_home_screen(self, speed_kph, alt_m, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_home_screen(self, speed_kph, alt_m, gps_fix, time_str, incline_deg, time_to_last_lift_seconds):
+        """Displays the main home screen with all primary data points."""
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
         
-        speed_text = f"{speed_kph:.1f}"
-        alt_text = f"{alt_m:.0f}"
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
 
-        draw.text((5, 25), speed_text, font=self.font_xl, fill=0)
-        draw.text((5, 50), "kph", font=self.font_small, fill=0)
+        # --- Main Data ---
+        draw.text((5, 20), f"{speed_kph:.1f}", font=self.font_large, fill=0)
+        draw.text((5, 40), "kph", font=self.font_small, fill=0)
         
-        alt_bbox = draw.textbbox((0,0), alt_text, font=self.font_xl)
-        draw.text((self.width - alt_bbox[2] - 5, 25), alt_text, font=self.font_xl, fill=0)
-        draw.text((self.width - 30, 50), "m", font=self.font_small, fill=0)
+        draw.text((self.width - 50, 20), f"{alt_m:.0f}", font=self.font_large, fill=0)
+        draw.text((self.width - 50, 40), "m", font=self.font_small, fill=0)
+        
+        # --- Incline Meter ---
+        draw.text((5, 55), f"SLOPE: {incline_deg:.0f} deg", font=self.font_small, fill=0)
 
+        # --- Last Lift Countdown Timer ---
+        if time_to_last_lift_seconds is not None and time_to_last_lift_seconds > 0:
+            mins, secs = divmod(int(time_to_last_lift_seconds), 60)
+            countdown_text = f"CLOSE: {mins:02d}:{secs:02d}"
+            text_bbox = draw.textbbox((0, 0), countdown_text, font=self.font_small)
+            text_width = text_bbox[2] - text_bbox[0]
+            draw.text(((self.width - text_width) / 2, 55), countdown_text, font=self.font_small, fill=0)
+        
+        self._draw_page_indicator(draw, "HOME")
         self._display_image(image)
 
-    def display_compass_screen(self, heading, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        if not header_data.get('gps_fix'):
-            draw.text((20, 35), "NO SIGNAL", font=self.font_large, fill=0)
-        else:
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_compass_screen(self, heading, gps_fix, time_str):
+        """Displays a digital compass with the persistent header."""
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+
+        if gps_fix:
+            dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+            cardinal = dirs[math.floor((heading + 22.5) / 45) % 8]
             heading_text = f"{heading:.0f}"
-            cardinal_dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
-            cardinal = cardinal_dirs[int(round(heading / 45))]
-            heading_bbox = draw.textbbox((0,0), heading_text, font=self.font_xl)
-            draw.text(((self.width - heading_bbox[2]) / 2, 25), heading_text, font=self.font_xl, fill=0)
-            cardinal_bbox = draw.textbbox((0,0), cardinal, font=self.font_large)
-            draw.text(((self.width - cardinal_bbox[2]) / 2, 50), cardinal, font=self.font_large, fill=0)
+            
+            text_bbox = draw.textbbox((0, 0), heading_text, font=self.font_xlarge)
+            text_width = text_bbox[2] - text_bbox[0]
+            draw.text(((self.width - text_width) / 2, 20), heading_text, font=self.font_xlarge, fill=0)
+
+            text_bbox = draw.textbbox((0, 0), cardinal, font=self.font_large)
+            text_width = text_bbox[2] - text_bbox[0]
+            draw.text(((self.width - text_width) / 2, 45), cardinal, font=self.font_large, fill=0)
+        else:
+            draw.text((20, 35), "No GPS Signal", font=self.font_large, fill=0)
+
+        self._draw_page_indicator(draw, "COMPASS")
         self._display_image(image)
 
-    def display_performance_profile_screen(self, profile_data, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        relaxed = profile_data.get('relaxed_time', 0)
-        cruising = profile_data.get('cruising_time', 0)
-        aggressive = profile_data.get('aggressive_time', 0)
-        total = relaxed + cruising + aggressive
-        if total == 0:
-            draw.text((20, 35), "NO DATA", font=self.font_large, fill=0)
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_achievements_screen(self, bests, gps_fix, time_str):
+        """Displays the 'Day's Best' achievements with the persistent header."""
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+        y_pos = 18
+
+        if not bests or not any(bests.values()):
+            draw.text((5, 35), "No runs logged yet.", font=self.font_small, fill=0)
         else:
-            agg_pct = (aggressive / total) * 100
-            cruise_pct = (cruising / total) * 100
-            draw.text((5, 25), f"Aggressive: {agg_pct:.0f}%", font=self.font_large, fill=0)
-            draw.text((5, 45), f"Cruising: {cruise_pct:.0f}%", font=self.font_large, fill=0)
+            if bests.get('longest_run'):
+                duration = bests['longest_run']['duration_seconds']
+                run_name = bests['longest_run']['run_name']
+                draw.text((2, y_pos), f"TIME: {duration/60:.0f}m {duration%60:.0f}s on {run_name[:8]}", font=self.font_small, fill=0)
+                y_pos += 15
+            
+            if bests.get('biggest_vertical'):
+                vert = bests['biggest_vertical']['vertical_m']
+                run_name = bests['biggest_vertical']['run_name']
+                draw.text((2, y_pos), f"VERT: {vert:.0f}m on {run_name[:10]}", font=self.font_small, fill=0)
+                y_pos += 15
+
+            if bests.get('fastest_run'):
+                speed = bests['fastest_run']['top_speed_kph']
+                run_name = bests['fastest_run']['run_name']
+                draw.text((2, y_pos), f"SPD: {speed:.1f}kph on {run_name[:8]}", font=self.font_small, fill=0)
+
+        self._draw_page_indicator(draw, "ACHIEVEMENTS")
         self._display_image(image)
 
-    def display_achievements_screen(self, bests_data, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        fastest_run = bests_data.get('fastest_run')
-        if fastest_run:
-            speed = fastest_run['top_speed_kph']
-            draw.text((5, 25), f"Top Speed: {speed:.1f} kph", font=self.font_large, fill=0)
-        else:
-            draw.text((5, 25), "Top Speed: N/A", font=self.font_large, fill=0)
-        biggest_drop = bests_data.get('biggest_drop')
-        if biggest_drop:
-            drop = biggest_drop['vertical_m']
-            draw.text((5, 45), f"Big Drop: {drop:.0f} m", font=self.font_large, fill=0)
-        else:
-            draw.text((5, 45), "Big Drop: N/A", font=self.font_large, fill=0)
-        self._display_image(image)
-
-    def display_current_weather_screen(self, weather_data, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        condition = weather_data.get('forecast_condition', 'Loading...')
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_current_weather_screen(self, weather_data, gps_fix, time_str):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+        
         temp = weather_data.get('current_temp', 'N/A')
-        icon = WEATHER_ICONS.get(condition, "?")
-        icon_bbox = draw.textbbox((0,0), icon, font=self.font_xl)
-        draw.text((15, 30), icon, font=self.font_xl, fill=0)
-        draw.text((50, 25), f"{condition}", font=self.font_large, fill=0)
-        draw.text((50, 45), f"Temp: {temp}", font=self.font_large, fill=0)
+        condition = weather_data.get('forecast_condition', 'Loading...')
+        updated = weather_data.get('last_updated', '--:--')
+        
+        draw.text((5, 25), condition, font=self.font_large, fill=0)
+        draw.text((5, 45), f"Temp: {temp}", font=self.font_small, fill=0)
+        draw.text((self.width - 40, 55), f"@{updated}", font=self.font_small, fill=0)
+
+        self._draw_page_indicator(draw, "WEATHER", sub_page_info="1/2")
         self._display_image(image)
 
-    def display_snow_report_screen(self, weather_data, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_snow_report_screen(self, weather_data, gps_fix, time_str):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+
         snow = weather_data.get('snowfall_today', 'N/A')
-        draw.text((5, 25), "24h Snowfall:", font=self.font_large, fill=0)
-        draw.text((5, 45), f"{snow}", font=self.font_large, fill=0)
-        self._display_image(image)
+        updated = weather_data.get('last_updated', '--:--')
 
-    def display_summary_screen(self, summary_data, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
+        draw.text((5, 25), "24h Snowfall:", font=self.font_large, fill=0)
+        draw.text((5, 45), snow, font=self.font_small, fill=0)
+        draw.text((self.width - 40, 55), f"@{updated}", font=self.font_small, fill=0)
+
+        self._draw_page_indicator(draw, "WEATHER", sub_page_info="2/2")
+        self._display_image(image)
+        
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_navigation_screen(self, next_waypoint_info, time_str, is_main_page=True, active_route=None, gps_fix=False, poi_info=None):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+
+        target_info = next_waypoint_info or poi_info
+
+        if target_info:
+            wp_name = target_info['name']
+            if len(wp_name) > 20: wp_name = wp_name[:18] + "..."
+            draw.text((5, 20), f"{wp_name}", font=self.font_small, fill=0)
+
+            if 'distance_m' in target_info and gps_fix:
+                wp_dist_m = target_info['distance_m']
+                draw.text((5, 35), f"{wp_dist_m:.0f} m", font=self.font_large, fill=0)
+            elif not gps_fix:
+                draw.text((5, 35), "No GPS Signal", font=self.font_small, fill=0)
+            else:
+                 draw.text((5, 35), "Press '/' to advance", font=self.font_small, fill=0)
+        else:
+            draw.text((20, 35), "No Active", font=self.font_large, fill=0)
+            draw.text((20, 50), "Route", font=self.font_large, fill=0)
+            
+        if is_main_page:
+            self._draw_page_indicator(draw, "NAVIGATION")
+            
+        self._display_image(image)
+        
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_summary_screen(self, summary_data, gps_fix, time_str):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+        
         vert_m = summary_data.get('total_vertical_m', 0)
         top_kph = summary_data.get('top_speed_kph', 0)
-        draw.text((5, 25), f"Vertical: {vert_m:.0f} m", font=self.font_large, fill=0)
-        draw.text((5, 45), f"Top Speed: {top_kph:.1f} kph", font=self.font_large, fill=0)
+        draw.text((5, 20), "Vertical:", font=self.font_small, fill=0)
+        draw.text((70, 20), f"{vert_m:.0f} m", font=self.font_small, fill=0)
+        draw.text((5, 35), "Top Speed:", font=self.font_small, fill=0)
+        draw.text((70, 35), f"{top_kph:.1f} kph", font=self.font_small, fill=0)
+        self._draw_page_indicator(draw, "STATS")
         self._display_image(image)
 
-    def display_run_logbook_screen(self, log_entries, header_data):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_run_logbook_screen(self, log_entries, page_num, total_pages, gps_fix, time_str):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+
+        title = "RUN LOGBOOK"
+        if total_pages > 0:
+            title = f"LOG ({page_num}/{total_pages})"
+        
+        y_pos = 20
         if not log_entries:
-            draw.text((20, 35), "NO RUNS LOGGED", font=self.font_large, fill=0)
+            draw.text((5, 35), "No runs logged yet.", font=self.font_small, fill=0)
         else:
-            y_pos = 25
             for entry in log_entries:
                 run_name = entry['run_name']
-                if len(run_name) > 12: run_name = run_name[:11] + "..."
+                if len(run_name) > 10: run_name = run_name[:9] + "..."
                 duration = entry['duration_seconds']
-                minutes, seconds = divmod(duration, 60)
-                time_str = f"{int(minutes):02}:{int(seconds):02}"
-                draw.text((5, y_pos), run_name, font=self.font_large, fill=0)
-                time_bbox = draw.textbbox((0,0), time_str, font=self.font_large)
-                draw.text((self.width - time_bbox[2] - 5, y_pos), time_str, font=self.font_large, fill=0)
-                y_pos += 20
+                vert = entry['vertical_m']
+                draw.text((2, y_pos), f"@{entry['time']} {run_name} {duration/60:.0f}m {vert:.0f}m", font=self.font_small, fill=0)
+                y_pos += 15
+
+        self._draw_page_indicator(draw, title)
         self._display_image(image)
 
-    def display_navigation_screen(self, next_waypoint_info, header_data, is_main_page=True):
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_run_analytics_screen(self, analytics, gps_fix, time_str):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
         
-        if next_waypoint_info:
-            name = next_waypoint_info['name']
-            if len(name) > 18: name = name[:17] + "..."
-            draw.text((5, 25), f"{name}", font=self.font_large, fill=0)
-            if 'distance_m' in next_waypoint_info and header_data.get('gps_fix'):
-                dist = next_waypoint_info['distance_m']
-                draw.text((5, 45), f"{dist:.0f} m", font=self.font_large, fill=0)
-            else:
-                 draw.text((5, 45), "NO GPS SIGNAL", font=self.font_small, fill=0)
-        elif is_main_page:
-            draw.text((20, 35), "NO ACTIVE ROUTE", font=self.font_large, fill=0)
+        run_name = analytics.get('run_name', 'Run')
+        draw.text((2, 18), f"{run_name[:16]} Stats", font=self.font_small, fill=0)
         
-        self._display_image(image)
-        
-    def display_id_entry_screen(self, prompt, id_buffer, waypoint_name, header_data):
-        """Displays the screen for entering a waypoint ID."""
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        
-        draw.text((5, 25), f"{prompt}: {id_buffer}", font=self.font_large, fill=0)
-        
-        name_to_display = waypoint_name if waypoint_name else "..."
-        if len(name_to_display) > 18: name_to_display = name_to_display[:17] + "..."
-        draw.text((5, 45), name_to_display, font=self.font_large, fill=0)
+        duration = analytics.get('duration', 0)
+        vert = analytics.get('vertical', 0)
+        top_speed = analytics.get('top_speed', 0)
 
-        self._display_image(image)
-
-    def display_ski_patrol_screen(self, phone_number, header_data):
-        # (This function remains the same)
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        draw.text((5, 25), "SKI PATROL", font=self.font_large, fill=0)
-        draw.text((5, 45), f"{phone_number}", font=self.font_large, fill=0)
-        self._display_image(image)
-
-    def display_diagnostic_screen(self, gps_data, header_data):
-        # (This function remains the same)
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        lat = gps_data.get('lat', 0)
-        lon = gps_data.get('lon', 0)
-        draw.text((5, 25), f"Lat: {lat:.4f}", font=self.font_large, fill=0)
-        draw.text((5, 45), f"Lon: {lon:.4f}", font=self.font_large, fill=0)
+        draw.text((5, 30), f"Time: {duration/60:.0f}m {duration%60:.0f}s", font=self.font_small, fill=0)
+        draw.text((5, 42), f"Vertical: {vert:.0f} m", font=self.font_small, fill=0)
+        draw.text((5, 54), f"Top Speed: {top_speed:.1f} kph", font=self.font_small, fill=0)
         self._display_image(image)
         
-    def display_run_analytics_screen(self, analytics_data, header_data):
-        # (This function remains the same)
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        run_name = analytics_data['run_name']
-        if len(run_name) > 18: run_name = run_name[:17] + "..."
-        draw.text((5, 25), run_name, font=self.font_large, fill=0)
-        duration = analytics_data['duration_seconds']
-        minutes, seconds = divmod(duration, 60)
-        time_str = f"Time: {int(minutes):02}:{int(seconds):02}"
-        draw.text((5, 45), time_str, font=self.font_large, fill=0)
-        if analytics_data.get('personal_best'):
-            pb_text = "NEW PB!"
-            pb_bbox = draw.textbbox((0,0), pb_text, font=self.font_small)
-            draw.rectangle((self.width - pb_bbox[2] - 8, 43, self.width, 63), fill=0)
-            draw.text((self.width - pb_bbox[2] - 5, 45), pb_text, font=self.font_small, fill=255)
-        self._display_image(image)
-
-    def display_menu(self, title, items, header_data):
-        # (This function remains the same)
-        image, draw = self._create_base_image_and_draw()
-        self._draw_header(draw, header_data)
-        y_pos = 25
+    # --- MODIFICATION: Removed 'is_recording' argument ---
+    def display_menu(self, title, items, gps_fix, time_str, page_indicator=None):
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        # Call header function without is_recording
+        self._draw_persistent_header(draw, gps_fix, time_str)
+        
+        y_pos = 20
         for item in items:
-            draw.text((5, y_pos), item['name'], font=self.font_large, fill=0)
-            y_pos += 20
+            draw.text((5, y_pos), item['name'], font=self.font_small, fill=0)
+            y_pos += 15
+            if y_pos > self.height - 15: break
+        if page_indicator:
+            self._draw_page_indicator(draw, page_indicator)
+        else:
+            self._draw_page_indicator(draw, title)
+
         self._display_image(image)
 
     def display_message(self, message, duration_ms):
-        # (This function remains the same)
-        image, draw = self._create_base_image_and_draw()
-        bbox = draw.textbbox((0,0), message, font=self.font_large)
-        draw.text(((self.width - bbox[2])/2, (self.height-bbox[3])/2), message, font=self.font_large, fill=0)
+        image = self._create_base_image()
+        draw = ImageDraw.Draw(image)
+        text_bbox = draw.textbbox((0, 0), message, font=self.font_large)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        x = (self.width - text_width) / 2
+        y = (self.height - text_height) / 2
+        draw.text((x, y), message, font=self.font_large, fill=0)
         self._display_image(image)
         time.sleep(duration_ms / 1000.0)
 

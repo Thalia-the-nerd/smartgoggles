@@ -1,0 +1,42 @@
+2025-11-01 15:49:47 - --- Main application starting up ---
+2025-11-01 15:49:47 - Successfully grabbed keypad at /dev/input/event5
+2025-11-01 15:49:47 - Starting recorder automatically.
+2025-11-01 15:49:47 - Loaded 23 waypoints into cache.
+2025-11-01 15:49:47 - Audio warning: Lifts closing soon.
+2025-11-01 15:50:23 - --- Main application shutting down ---
+2025-11-01 15:50:37 - --- Main application starting up ---
+2025-11-01 15:50:37 - Successfully grabbed keypad at /dev/input/event5
+2025-11-01 15:50:37 - Starting recorder automatically.
+2025-11-01 15:50:37 - Loaded 23 waypoints into cache.
+2025-11-01 15:50:37 - Audio warning: Lifts closing soon.
+2025-11-01 15:51:11 - Navigation wizard started.
+2025-11-01 15:51:12 - Wizard state SELECT_TYPE: User selected 'Waypoint-to-Waypoint'
+2025-11-01 15:51:12 - Offering 'Use Closest': Applejack - X (ID: 16)
+2025-11-01 15:51:13 - Offering 'Use Closest': Applejack - X (ID: 16)
+2025-11-01 15:51:14 - Wizard state AWAIT_CLOSEST_OR_MANUAL: User selected 'Enter ID Manually'
+2025-11-01 15:51:16 - User entered ID: '2' for state AWAIT_START_WP
+2025-11-01 15:51:17 - ID Search Result: Found Cruiser - top (ID: 2)
+2025-11-01 15:51:19 - Wizard state SELECT_DESTINATION_TYPE: User selected 'To Nearest POI'
+2025-11-01 15:51:20 - Wizard state SELECT_POI_TYPE: User selected 'Lodge'
+2025-11-01 15:51:21 - Wizard state SELECT_DIFFICULTY: User selected 'Green'
+2025-11-01 15:51:21 - --- Main application shutting down ---
+2025-11-01 15:51:36 - --- Main application starting up ---
+2025-11-01 15:51:36 - Successfully grabbed keypad at /dev/input/event5
+2025-11-01 15:51:36 - Starting recorder automatically.
+2025-11-01 15:51:36 - Loaded 23 waypoints into cache.
+2025-11-01 15:51:36 - Audio warning: Lifts closing soon.
+2025-11-01 15:51:41 - Navigation wizard started.
+2025-11-01 15:51:44 - Wizard state SELECT_TYPE: User selected 'Waypoint-to-Waypoint'
+2025-11-01 15:51:44 - Offering 'Use Closest': Applejack - X (ID: 16)
+2025-11-01 15:51:44 - Offering 'Use Closest': Applejack - X (ID: 16)
+2025-11-01 15:51:45 - Offering 'Use Closest': Applejack - X (ID: 16)
+2025-11-01 15:51:46 - Wizard state AWAIT_CLOSEST_OR_MANUAL: User selected 'Enter ID Manually'
+2025-11-01 15:51:49 - User entered ID: '2' for state AWAIT_START_WP
+2025-11-01 15:51:51 - ID Search Result: Found Cruiser - top (ID: 2)
+2025-11-01 15:51:52 - Wizard state SELECT_DESTINATION_TYPE: User selected 'To a Waypoint'
+2025-11-01 15:51:54 - User entered ID: '3' for state AWAIT_END_WP
+2025-11-01 15:51:55 - ID Search Result: Found Cruiser - bottom (ID: 3)
+2025-11-01 15:51:56 - Wizard state SELECT_DIFFICULTY: User selected 'Green'
+2025-11-01 15:51:56 - Finding W2W path: Start=2, End=3, Diff=Green
+2025-11-01 15:51:59 - No path found for W2W route.
+2025-11-01 15:52:17 - --- Main application shutting down ---

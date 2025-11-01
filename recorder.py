@@ -5,6 +5,9 @@ import queue
 from datetime import datetime
 import time
 
+# --- MODIFICATION: Set camera_index to -1 to auto-detect ---
+camera_index = -1 
+
 class VideoRecorder:
     """
     Handles video recording with an enhanced GPS and status overlay.
@@ -42,9 +45,12 @@ class VideoRecorder:
 
     def _record_loop(self):
         """The main recording loop that runs in its own thread."""
-        cap = cv2.VideoCapture(1)
+        # --- MODIFICATION: Force the V4L2 backend ---
+        cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        
         if not cap.isOpened():
-            print("RECORDER ERROR: Cannot open webcam.")
+            # --- MODIFICATION: Updated error message ---
+            print(f"RECORDER ERROR: Cannot open webcam at index {camera_index} with V4L2 backend.")
             return
 
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -64,7 +70,10 @@ class VideoRecorder:
 
         while not self._stop_event.is_set():
             ret, frame = cap.read()
-            if not ret: break
+            if not ret: 
+                # --- MODIFICATION: Added new error message ---
+                print("RECORDER ERROR: cap.read() failed. Check camera index or connection.")
+                break
 
             # Check for new GPS data from the queue
             try:
@@ -107,4 +116,5 @@ class VideoRecorder:
         cap.release()
         writer.release()
         cv2.destroyAllWindows()
+
 

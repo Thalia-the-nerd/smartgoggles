@@ -3,23 +3,15 @@ import time
 import sqlite3
 import os
 from datetime import date
+import db_manager # Import the db_manager
 
 # --- Configuration ---
 LOG_INTERVAL_SECONDS = 5  # How often to attempt to write a data point to the log.
 MIN_SPEED_MPS = 1.0       # Minimum speed in meters/second to be considered "moving".
-LOG_DIRECTORY = 'daily_logs' # Directory to store the daily database files.
+# LOG_DIRECTORY is now managed by db_manager
 
-def setup_daily_db(cursor):
-    """Creates the necessary table in a new daily database file."""
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS trip_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        lat REAL NOT NULL,
-        lon REAL NOT NULL,
-        alt REAL NOT NULL,
-        speed REAL NOT NULL
-    )''')
+# --- REMOVED setup_daily_db function ---
+# It is now centralized in db_manager.py
 
 def trip_logger_thread(gps_data, data_lock, stop_event):
     """
@@ -27,9 +19,6 @@ def trip_logger_thread(gps_data, data_lock, stop_event):
     into a new database file created each day.
     """
     print("TRIP_LOGGER: Thread started.")
-    
-    # Ensure the log directory exists
-    os.makedirs(LOG_DIRECTORY, exist_ok=True)
     
     conn = None
     cursor = None
@@ -45,13 +34,15 @@ def trip_logger_thread(gps_data, data_lock, stop_event):
                     print(f"TRIP_LOGGER: Closed DB for {current_db_date}. New day detected.")
 
                 current_db_date = today
-                db_filename = f"{current_db_date.strftime('%Y-%m-%d')}.db"
-                db_path = os.path.join(LOG_DIRECTORY, db_filename)
+                # --- MODIFICATION: Get path from db_manager ---
+                db_path = db_manager.get_daily_db_path()
                 
                 print(f"TRIP_LOGGER: Connecting to daily database: {db_path}")
                 conn = sqlite3.connect(db_path, check_same_thread=False)
                 cursor = conn.cursor()
-                setup_daily_db(cursor)
+                # --- MODIFICATION: Call db_manager to set up tables ---
+                db_manager.setup_daily_db(cursor)
+                conn.commit() # Commit the table creation
                 print(f"TRIP_LOGGER: Database connection for {current_db_date} is active.")
 
             # The wait() function will block but returns early if the event is set
@@ -62,9 +53,11 @@ def trip_logger_thread(gps_data, data_lock, stop_event):
             log_this_point = False
 
             with data_lock:
-                if gps_data.get('fix') and gps_data.get('speed', 0) > MIN_SPEED_MPS:
+                # Check for fix and minimum speed
+                if gps_data.get('fix') and gps_data.get('speed_mps', 0) > MIN_SPEED_MPS:
                     lat, lon = gps_data.get('lat'), gps_data.get('lon')
-                    alt, speed = gps_data.get('alt_m'), gps_data.get('speed')
+                    # Use alt_m and speed_mps from gps_handler
+                    alt, speed = gps_data.get('alt_m'), gps_data.get('speed_mps') 
                     if all(v is not None for v in [lat, lon, alt, speed]):
                         log_this_point = True
 
